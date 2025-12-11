@@ -9,7 +9,6 @@ from app.api import api_router
 
 sys.path.append('/app')
 
-from app.models import Users, Notes, ChatSession, ChatMessage
 
 def get_logger():
     settings = get_app_settings()
