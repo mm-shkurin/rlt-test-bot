@@ -11,4 +11,4 @@ COPY app/ app/
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "bot.main"]
+CMD ["python", "-m", "bot"]
