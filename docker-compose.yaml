@@ -77,6 +77,28 @@ services:
           memory: 256M
     stdin_open: true
     tty: true
+  bot:
+    container_name: test_bot
+    build:
+      context: .
+      dockerfile: docker/bot/Dockerfile.bot
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - BACKEND_API_URL=http://app:${APP_PORT}
+    networks:
+      - test_network
+    restart: unless-stopped
+
 
 volumes:
   test_postgres_data: null
