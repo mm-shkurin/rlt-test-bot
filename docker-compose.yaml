@@ -12,10 +12,6 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      chroma:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
     ports:
       - ${APP_PORT}:${APP_PORT}
     volumes:
