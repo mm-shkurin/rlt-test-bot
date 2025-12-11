@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: test_app
+    build:
+      context: .
+      dockerfile: docker/fastapi/Dockerfile
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    volumes:
+      - .:/app
+    networks:
+      - test_network
+
+  postgres:
+    container_name: test_postgres
+    image: postgres:17-alpine
+    restart: always
+    expose:
+      - ${POSTGRES_PORT}
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - test_network
+    healthcheck:
+      interval: 30s
+      retries: 5
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      timeout: 10s
+
+  redis:
+    container_name: test_redis
+    image: redis:latest
+    restart: always
+    expose:
+      - ${REDIS_PORT}
+    volumes:
+      - test_redis_data:/data
+    networks:
+      - test_network
+    healthcheck:
+      interval: 30s
+      retries: 5
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 10s
+    command: |
+      sh -c '
+        mkdir -p /usr/local/etc/redis &&
+        echo "bind 0.0.0.0" > /usr/local/etc/redis/redis.conf &&
+        echo "appendonly yes" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendfsync everysec" >> /usr/local/etc/redis/redis.conf &&
+        redis-server /usr/local/etc/redis/redis.conf
+      '
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    stdin_open: true
+    tty: true
+
+volumes:
+  test_postgres_data: null
+  test_redis_data: null
+
+networks:
+  test_network:
+    driver: bridge
