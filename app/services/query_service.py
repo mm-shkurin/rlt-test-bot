@@ -91,7 +91,13 @@ class QueryService:
         if field is None:
             raise ValueError(f"Field {field_name} not found in {table}")
         
-        stmt = select(func.count(func.distinct(field)))
+        extract_date = query_params.get("_extract_date", False)
+        if extract_date:
+            distinct_field = func.date(field)
+        else:
+            distinct_field = field
+        
+        stmt = select(func.count(func.distinct(distinct_field)))
         stmt = self._apply_filters(stmt, query_params, model)
         
         result = await self.db.execute(stmt)

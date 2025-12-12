@@ -87,6 +87,9 @@ $schema_description
 5. "Сколько разных видео получали новые просмотры 27 ноября 2025?"
 Ответ: {"query_type": "distinct_count", "table": "video_snapshots", "field": "video_id", "filters": {"date": "2025-11-27", "delta_views_count_gt": 0}, "date_field": "created_at"}
 
+8. "Для креатора с id abc123 посчитай, в скольких разных календарных днях ноября 2025 года он публиковал хотя бы одно видео"
+Ответ: {"query_type": "distinct_count", "table": "videos", "field": "video_created_at", "filters": {"creator_id": "abc123", "date_from": "2025-11-01", "date_to": "2025-11-30"}, "date_field": "video_created_at", "_extract_date": true}
+
 6. "Сколько видео у креатора с id aca1061a9d324ecf8c3fa2bb32d7be63 набрали больше 10000 просмотров?"
 Ответ: {"query_type": "count", "table": "videos", "filters": {"creator_id": "aca1061a9d324ecf8c3fa2bb32d7be63", "metric_gt": {"field": "views_count", "value": 10000}}}
 
@@ -173,6 +176,19 @@ $schema_description
         
         return parsed
     
+    def _fix_date_field(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        if "field" in parsed:
+            field = parsed["field"]
+            if isinstance(field, str) and "::date" in field:
+                field_name = field.replace("::date", "").strip()
+                if field_name == "created_at" and parsed.get("table") == "videos":
+                    parsed["field"] = "video_created_at"
+                    parsed["_extract_date"] = True
+                else:
+                    parsed["field"] = field_name
+                    parsed["_extract_date"] = True
+        return parsed
+    
     def _fix_creator_id_if_distorted(self, parsed: Dict[str, Any], original_query: str) -> Dict[str, Any]:
         filters = parsed.get("filters", {})
         if "creator_id" not in filters:
@@ -226,6 +242,7 @@ $schema_description
             parsed = json.loads(content)
             parsed = self._fix_video_id_to_creator_id(parsed, user_query)
             parsed = self._fix_creator_id_if_distorted(parsed, user_query)
+            parsed = self._fix_date_field(parsed)
             
             validated = self._validate_query_structure(parsed)
             
@@ -265,6 +282,9 @@ $schema_description
                 value_lower = value.lower()
                 if value_lower in allowed_values:
                     continue
+                allowed_field_names = ["created_at", "video_created_at", "views_count", "likes_count", "comments_count", "reports_count", "creator_id", "video_id", "id", "delta_views_count", "delta_likes_count", "delta_comments_count", "delta_reports_count"]
+                if any(field_name in value_lower for field_name in allowed_field_names):
+                    continue
                 for keyword in dangerous_keywords:
                     if keyword in value_lower:
                         raise ValueError(f"Обнаружена запрещенная операция: {keyword} в значении {value}")
@@ -278,6 +298,9 @@ $schema_description
                     if isinstance(sub_value, str):
                         sub_value_lower = sub_value.lower()
                         if sub_value_lower in allowed_values:
+                            continue
+                        allowed_field_names = ["created_at", "video_created_at", "views_count", "likes_count", "comments_count", "reports_count", "creator_id", "video_id", "id", "delta_views_count", "delta_likes_count", "delta_comments_count", "delta_reports_count"]
+                        if any(field_name in sub_value_lower for field_name in allowed_field_names):
                             continue
                         for keyword in dangerous_keywords:
                             if keyword in sub_value_lower:
