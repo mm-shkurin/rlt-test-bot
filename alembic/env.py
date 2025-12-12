@@ -10,6 +10,8 @@ from app.core.config import DatabaseSettings
 from alembic import context
 
 from app.models.users import Users
+from app.models.videos import Video
+from app.models.video_snapshots import VideoSnapshot
 
 config = context.config
 
