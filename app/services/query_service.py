@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 import re
 
@@ -58,9 +58,19 @@ class QueryService:
         if field is None:
             raise ValueError(f"Field {field_name} not found in {table}")
         
-        stmt = select(func.sum(field))
-        stmt = self._apply_filters(stmt, query_params, model)
+        filters = query_params.get("filters", {})
+        needs_join = table == "video_snapshots" and "creator_id" in filters
         
+        if needs_join:
+            stmt = select(func.sum(field)).select_from(VideoSnapshot).join(
+                Video, VideoSnapshot.video_id == Video.id
+            )
+            stmt = self._apply_filters(stmt, query_params, model, join_already_done=True)
+        else:
+            stmt = select(func.sum(field))
+            stmt = self._apply_filters(stmt, query_params, model)
+        
+        logger.debug(f"SQL query: {stmt}")
         result = await self.db.execute(stmt)
         sum_value = result.scalar_one() or 0
         
@@ -90,7 +100,7 @@ class QueryService:
         logger.debug(f"Distinct count query result: {count}")
         return int(count) if count is not None else 0
     
-    def _apply_filters(self, stmt, query_params: Dict[str, Any], model) -> Any:
+    def _apply_filters(self, stmt, query_params: Dict[str, Any], model, join_already_done: bool = False) -> Any:
         filters = query_params.get("filters", {})
         date_field = query_params.get("date_field")
         
@@ -100,24 +110,56 @@ class QueryService:
             if hasattr(model, "creator_id"):
                 stmt = stmt.where(model.creator_id == creator_id)
             elif model == VideoSnapshot:
-                stmt = stmt.join(Video, VideoSnapshot.video_id == Video.id).where(Video.creator_id == creator_id)
+                if not join_already_done:
+                    stmt = stmt.join(Video, VideoSnapshot.video_id == Video.id)
+                stmt = stmt.where(Video.creator_id == creator_id)
+                logger.debug(f"Applied creator_id filter: {creator_id}")
+                query_type = query_params.get("query_type")
+                field_name = query_params.get("field", "")
+                if query_type == "sum" and field_name.startswith("delta_") and field_name.endswith("_count"):
+                    field = getattr(VideoSnapshot, field_name, None)
+                    if field:
+                        stmt = stmt.where(field > 0)
+                        logger.debug(f"Applied filter: {field_name} > 0")
         
         if "date" in filters:
             date_str = filters["date"]
             parsed_date = self._parse_date(date_str)
-            date_start = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            date_end = parsed_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            if "time_from" in filters and "time_to" in filters:
+                time_from_str = filters["time_from"]
+                time_to_str = filters["time_to"]
+                from datetime import time as dt_time
+                
+                try:
+                    time_from_parts = time_from_str.split(":")
+                    time_to_parts = time_to_str.split(":")
+                    time_from = dt_time(int(time_from_parts[0]), int(time_from_parts[1]) if len(time_from_parts) > 1 else 0)
+                    time_to = dt_time(int(time_to_parts[0]), int(time_to_parts[1]) if len(time_to_parts) > 1 else 0)
+                    
+                    date_start = datetime.combine(parsed_date.date(), time_from)
+                    date_end = datetime.combine(parsed_date.date(), time_to)
+                    if date_end < date_start:
+                        date_end = datetime.combine(parsed_date.date() + timedelta(days=1), time_to)
+                except (ValueError, IndexError):
+                    date_start = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                    date_end = parsed_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            else:
+                date_start = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                date_end = parsed_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             
             if date_field == "video_created_at":
                 stmt = stmt.where(
                     model.video_created_at >= date_start,
                     model.video_created_at <= date_end
                 )
+                logger.debug(f"Applied date filter (video_created_at): {date_start} - {date_end}")
             elif date_field == "created_at":
                 stmt = stmt.where(
-                    model.created_at >= date_start,
-                    model.created_at <= date_end
+                    VideoSnapshot.created_at >= date_start,
+                    VideoSnapshot.created_at <= date_end
                 )
+                logger.debug(f"Applied date filter (created_at): {date_start} - {date_end}")
         
         if "date_from" in filters and "date_to" in filters:
             date_from = self._parse_date(filters["date_from"])
@@ -133,8 +175,8 @@ class QueryService:
                 )
             elif date_field == "created_at":
                 stmt = stmt.where(
-                    model.created_at >= date_from_start,
-                    model.created_at <= date_to_end
+                    VideoSnapshot.created_at >= date_from_start,
+                    VideoSnapshot.created_at <= date_to_end
                 )
         
         if "metric_gt" in filters:

@@ -90,6 +90,9 @@ $schema_description
 6. "Сколько видео у креатора с id aca1061a9d324ecf8c3fa2bb32d7be63 набрали больше 10000 просмотров?"
 Ответ: {"query_type": "count", "table": "videos", "filters": {"creator_id": "aca1061a9d324ecf8c3fa2bb32d7be63", "metric_gt": {"field": "views_count", "value": 10000}}}
 
+7. "На сколько просмотров суммарно выросли все видео креатора с id cd87be38b50b4fdd8342bb3c383f3c7d в период 28 ноября 2025?"
+Ответ: {"query_type": "sum", "table": "video_snapshots", "field": "delta_views_count", "filters": {"creator_id": "cd87be38b50b4fdd8342bb3c383f3c7d", "date": "2025-11-28"}, "date_field": "created_at"}
+
 КРИТИЧЕСКИ ВАЖНО для creator_id:
 - НИКОГДА не изменяй, не добавляй и не удаляй символы в creator_id
 - Копируй creator_id БУКВА В БУКВУ из запроса пользователя
@@ -101,10 +104,14 @@ $schema_description
 - Для дат используй формат YYYY-MM-DD
 - Если указан диапазон дат, используй date_from и date_to
 - Если указана одна дата, используй date
+- Если указан временной диапазон в пределах дня (например, "с 10:00 до 15:00"), используй time_from и time_to в формате "HH:MM"
 - Для таблицы videos используй date_field: "video_created_at"
 - Для таблицы video_snapshots используй date_field: "created_at"
 - Для фильтрации по метрикам используй metric_gt, metric_lt, metric_eq
 - Для фильтрации по приращениям используй delta_*_gt, delta_*_lt, delta_*_eq
+- КРИТИЧЕСКИ ВАЖНО: Если в запросе упоминается "креатора с id" или "креатор с id", ВСЕГДА используй фильтр "creator_id", НЕ "video_id"
+- "креатора с id" = creator_id (идентификатор автора видео)
+- video_id = идентификатор конкретного видео (используется только для фильтрации конкретного видео, не креатора)
 
 Безопасность:
 - Разрешены ТОЛЬКО запросы на чтение (count, sum, distinct_count)
@@ -135,6 +142,36 @@ $schema_description
                         return creator_id
         
         return None
+    
+    def _is_creator_query(self, user_query: str) -> bool:
+        creator_patterns = [
+            r'креатора\s+с\s+id',
+            r'креатор\s+с\s+id',
+            r'креатора\s+id',
+            r'креатор\s+id',
+        ]
+        query_lower = user_query.lower()
+        for pattern in creator_patterns:
+            if re.search(pattern, query_lower):
+                return True
+        return False
+    
+    def _fix_video_id_to_creator_id(self, parsed: Dict[str, Any], original_query: str) -> Dict[str, Any]:
+        if not self._is_creator_query(original_query):
+            return parsed
+        
+        filters = parsed.get("filters", {})
+        if "video_id" in filters and "creator_id" not in filters:
+            creator_id = self._extract_creator_id_from_query(original_query)
+            if creator_id:
+                logger.warning(
+                    f"LLM used video_id instead of creator_id. Fixing: video_id='{filters['video_id']}' -> creator_id='{creator_id}'"
+                )
+                del filters["video_id"]
+                filters["creator_id"] = creator_id
+                parsed["filters"] = filters
+        
+        return parsed
     
     def _fix_creator_id_if_distorted(self, parsed: Dict[str, Any], original_query: str) -> Dict[str, Any]:
         filters = parsed.get("filters", {})
@@ -187,6 +224,7 @@ $schema_description
             content = re.sub(r',(\s*[}\]])', r'\1', content)
             
             parsed = json.loads(content)
+            parsed = self._fix_video_id_to_creator_id(parsed, user_query)
             parsed = self._fix_creator_id_if_distorted(parsed, user_query)
             
             validated = self._validate_query_structure(parsed)
