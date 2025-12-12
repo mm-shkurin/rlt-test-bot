@@ -21,3 +21,5 @@ orjson==3.9.10
 redis==5.0.1
 aioredis==2.0.1
 arq==0.26.3
+gigachat==0.1.12
+dateparser==1.2.0

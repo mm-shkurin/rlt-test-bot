@@ -86,3 +86,13 @@ class TelegramSettings(BaseSettings):
     bot_token: str = Field(..., alias="TELEGRAM_BOT_TOKEN")
 
     model_config = BaseConfig.model_config
+
+
+class GigaChatSettings(BaseSettings):
+    giga_auth_key: str = Field(..., min_length=1, alias="GIGA_AUTH_KEY")
+    giga_client_id: str = Field(..., min_length=1, alias="GIGA_CLIENT_ID")
+    giga_scope: str = Field(default="GIGACHAT_API_PERS", alias="GIGA_SCOPE")
+    giga_oauth_url: HttpUrl = Field(..., alias="GIGA_OAUTH_URL")
+    giga_api_url: HttpUrl = Field(..., alias="GIGA_API_URL")
+    
+    model_config = BaseConfig.model_config

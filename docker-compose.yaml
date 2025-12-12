@@ -99,7 +99,6 @@ services:
       - test_network
     restart: unless-stopped
 
-
 volumes:
   test_postgres_data: null
   test_redis_data: null
