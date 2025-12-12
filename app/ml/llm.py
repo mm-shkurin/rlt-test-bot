@@ -293,7 +293,11 @@ $schema_description
         
         if query_type in ["sum", "distinct_count"]:
             if "field" not in data:
-                raise ValueError(f"Field is required for query_type: {query_type}")
+                if "fields" in data and isinstance(data["fields"], list) and len(data["fields"]) > 0:
+                    data["field"] = data["fields"][0]
+                    del data["fields"]
+                else:
+                    raise ValueError(f"Field is required for query_type: {query_type}")
         
         filters = data.get("filters", {})
         if not isinstance(filters, dict):
