@@ -43,3 +43,37 @@ docker-compose exec app alembic upgrade head
 ```bash
 docker-compose exec app python scripts/load_data.py data/videos.json
 ```
+
+### Поток обработки запроса
+
+1. Пользователь отправляет текстовое сообщение боту
+2. Бот отправляет запрос в FastAPI endpoint `/query/query`
+3. FastAPI ставит задачу в ARQ очередь
+4. ARQ Worker:
+   - Отправляет запрос в LLM (GigaChat) для преобразования естественного языка в структурированный JSON
+   - Выполняет SQL запрос через QueryService на основе JSON от LLM
+   - Возвращает числовой результат
+5. Бот отправляет результат пользователю
+
+### Преобразование естественного языка в SQL
+
+#### Подход
+
+Используется двухэтапный подход:
+
+1. **LLM (GigaChat)** преобразует естественный язык в структурированный JSON с параметрами запроса
+2. **QueryService** строит и выполняет безопасный SQL запрос через SQLAlchemy ORM
+
+
+## Технологии
+
+- **Python 3.12**
+- **FastAPI** - REST API
+- **aiogram 3.4** - Telegram бот
+- **PostgreSQL** - база данных
+- **SQLAlchemy 2.0** - ORM
+- **Alembic** - миграции БД
+- **ARQ** - асинхронная очередь задач
+- **Redis** - брокер сообщений для ARQ
+- **GigaChat API** - LLM для обработки естественного языка
+- **dateparser** - парсинг дат из естественного языка
