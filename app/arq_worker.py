@@ -11,7 +11,6 @@ class WorkerSettings:
     
     redis_settings = ArqRedisSettings(
         host=app_redis_config.redis_host,
-        port=app_redis_config.redis_port,
-        password=app_redis_config.redis_password
+        port=app_redis_config.redis_port
     )
 
