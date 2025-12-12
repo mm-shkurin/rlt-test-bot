@@ -107,13 +107,17 @@ class DataLoaderService:
         snapshot_batch: List[VideoSnapshot]
     ) -> None:
         try:
-            self.db.add_all(video_batch)
-            self.db.add_all(snapshot_batch)
-            await self.db.commit()
-            for video in video_batch:
-                await self.db.refresh(video)
-            for snapshot in snapshot_batch:
-                await self.db.refresh(snapshot)
+            if video_batch:
+                self.db.add_all(video_batch)
+                await self.db.commit()
+                for video in video_batch:
+                    await self.db.refresh(video)
+            
+            if snapshot_batch:
+                self.db.add_all(snapshot_batch)
+                await self.db.commit()
+                for snapshot in snapshot_batch:
+                    await self.db.refresh(snapshot)
                 
         except Exception as e:
             await self.db.rollback()
