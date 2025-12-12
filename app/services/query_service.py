@@ -96,6 +96,7 @@ class QueryService:
         
         if "creator_id" in filters:
             creator_id = filters["creator_id"]
+            creator_id = creator_id.replace("-", "")
             if hasattr(model, "creator_id"):
                 stmt = stmt.where(model.creator_id == creator_id)
             elif model == VideoSnapshot:

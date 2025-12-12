@@ -18,8 +18,6 @@ async def handle_query(message: Message, api_client: APIClient):
     
     logger.info(f"User {chat_id} sent query: {user_query[:100]}...")
     
-    await message.answer("Обрабатываю запрос...")
-    
     result = await api_client.process_query(user_query)
     
     if result is not None:

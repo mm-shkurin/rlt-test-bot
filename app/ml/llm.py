@@ -95,6 +95,7 @@ $schema_description
 - Для таблицы video_snapshots используй date_field: "created_at"
 - Для фильтрации по метрикам используй metric_gt, metric_lt, metric_eq
 - Для фильтрации по приращениям используй delta_*_gt, delta_*_lt, delta_*_eq
+- ВАЖНО: creator_id используй ТОЧНО так, как указано в запросе пользователя, без добавления дефисов или изменения формата
 
 Безопасность:
 - Разрешены ТОЛЬКО запросы на чтение (count, sum, distinct_count)
