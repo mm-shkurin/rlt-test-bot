@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict
+import re
 
 import dateparser
 from loguru import logger
@@ -184,6 +185,12 @@ class QueryService:
     def _parse_date(self, date_str: str) -> datetime:
         if isinstance(date_str, datetime):
             return date_str
+        
+        try:
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+                return datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            pass
         
         parsed = dateparser.parse(date_str, languages=["ru"])
         if parsed is None:
