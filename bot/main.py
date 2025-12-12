@@ -10,7 +10,7 @@ from loguru import logger
 from bot.clients.api_client import APIClient
 from bot.core.config import BotSettings
 from bot.core.middleware import APIClientMiddleware
-from bot.handlers import start
+from bot.handlers import start, query
 
 
 async def setup_logging():
@@ -45,6 +45,7 @@ async def main():
     dp = Dispatcher()
     dp.message.middleware(APIClientMiddleware(api_client))
     dp.include_router(start.router)
+    dp.include_router(query.router)
     
     async with lifespan(bot, api_client):
         logger.info("Bot is running...")

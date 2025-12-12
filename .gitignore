@@ -170,3 +170,7 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Data files (большие JSON файлы не должны попадать в git)
+data/*.json
+!data/.gitkeep
+
