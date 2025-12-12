@@ -103,6 +103,8 @@ class QueryService:
     def _apply_filters(self, stmt, query_params: Dict[str, Any], model, join_already_done: bool = False) -> Any:
         filters = query_params.get("filters", {})
         date_field = query_params.get("date_field")
+        if not date_field and "date_field" in filters:
+            date_field = filters.pop("date_field")
         
         if "creator_id" in filters:
             creator_id = filters["creator_id"]
@@ -168,16 +170,26 @@ class QueryService:
             date_from_start = date_from.replace(hour=0, minute=0, second=0, microsecond=0)
             date_to_end = date_to.replace(hour=23, minute=59, second=59, microsecond=999999)
             
+            if not date_field:
+                if model == Video:
+                    date_field = "video_created_at"
+                elif model == VideoSnapshot:
+                    date_field = "created_at"
+            
             if date_field == "video_created_at":
                 stmt = stmt.where(
                     model.video_created_at >= date_from_start,
                     model.video_created_at <= date_to_end
                 )
+                logger.debug(f"Applied date range filter (video_created_at): {date_from_start} - {date_to_end}")
             elif date_field == "created_at":
                 stmt = stmt.where(
                     VideoSnapshot.created_at >= date_from_start,
                     VideoSnapshot.created_at <= date_to_end
                 )
+                logger.debug(f"Applied date range filter (created_at): {date_from_start} - {date_to_end}")
+            else:
+                logger.warning(f"date_field is not set or invalid: {date_field}, filters: {filters}")
         
         if "metric_gt" in filters:
             metric_filter = filters["metric_gt"]
