@@ -1,7 +1,7 @@
 import json
 import re
 from string import Template
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from gigachat import GigaChat
 from loguru import logger
@@ -87,6 +87,16 @@ $schema_description
 5. "Сколько разных видео получали новые просмотры 27 ноября 2025?"
 Ответ: {"query_type": "distinct_count", "table": "video_snapshots", "field": "video_id", "filters": {"date": "2025-11-27", "delta_views_count_gt": 0}, "date_field": "created_at"}
 
+6. "Сколько видео у креатора с id aca1061a9d324ecf8c3fa2bb32d7be63 набрали больше 10000 просмотров?"
+Ответ: {"query_type": "count", "table": "videos", "filters": {"creator_id": "aca1061a9d324ecf8c3fa2bb32d7be63", "metric_gt": {"field": "views_count", "value": 10000}}}
+
+КРИТИЧЕСКИ ВАЖНО для creator_id:
+- НИКОГДА не изменяй, не добавляй и не удаляй символы в creator_id
+- Копируй creator_id БУКВА В БУКВУ из запроса пользователя
+- Если в запросе "aca1061a9d324ecf8c3fa2bb32d7be63", используй ТОЧНО "aca1061a9d324ecf8c3fa2bb32d7be63"
+- НЕ добавляй лишние символы, НЕ исправляй, НЕ форматируй
+- Это критично для корректной работы системы
+
 Правила:
 - Для дат используй формат YYYY-MM-DD
 - Если указан диапазон дат, используй date_from и date_to
@@ -95,7 +105,6 @@ $schema_description
 - Для таблицы video_snapshots используй date_field: "created_at"
 - Для фильтрации по метрикам используй metric_gt, metric_lt, metric_eq
 - Для фильтрации по приращениям используй delta_*_gt, delta_*_lt, delta_*_eq
-- ВАЖНО: creator_id используй ТОЧНО так, как указано в запросе пользователя, без добавления дефисов или изменения формата
 
 Безопасность:
 - Разрешены ТОЛЬКО запросы на чтение (count, sum, distinct_count)
@@ -108,6 +117,49 @@ $schema_description
 """
         template = Template(template_str)
         return template.safe_substitute(schema_description=schema_desc, user_query="$user_query")
+    
+    def _extract_creator_id_from_query(self, user_query: str) -> Optional[str]:
+        patterns = [
+            r'(?:креатора\s+с\s+id|id|creator_id)[\s:]+([a-f0-9\-]{32,36})',
+            r'([a-f0-9]{32})', 
+            r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})', 
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, user_query, re.IGNORECASE)
+            for match in matches:
+                creator_id = match.group(1).replace("-", "").lower()
+                if len(creator_id) == 32:  
+                    if re.match(r'^[a-f0-9]{32}$', creator_id):
+                        logger.debug(f"Extracted creator_id from query: {creator_id}")
+                        return creator_id
+        
+        return None
+    
+    def _fix_creator_id_if_distorted(self, parsed: Dict[str, Any], original_query: str) -> Dict[str, Any]:
+        filters = parsed.get("filters", {})
+        if "creator_id" not in filters:
+            return parsed
+        
+        original_creator_id = self._extract_creator_id_from_query(original_query)
+        if not original_creator_id:
+            return parsed
+        
+        llm_creator_id = str(filters["creator_id"]).replace("-", "").lower()
+        original_creator_id_normalized = original_creator_id.lower()
+        
+        if llm_creator_id != original_creator_id_normalized:
+            logger.warning(
+                f"LLM distorted creator_id: original='{original_creator_id_normalized}', "
+                f"llm='{llm_creator_id}'. Fixing..."
+            )
+            filters["creator_id"] = original_creator_id
+            parsed["filters"] = filters
+        else:
+            filters["creator_id"] = original_creator_id
+            parsed["filters"] = filters
+        
+        return parsed
     
     def parse_query(self, user_query: str) -> Dict[str, Any]:
         try:
@@ -135,6 +187,7 @@ $schema_description
             content = re.sub(r',(\s*[}\]])', r'\1', content)
             
             parsed = json.loads(content)
+            parsed = self._fix_creator_id_if_distorted(parsed, user_query)
             
             validated = self._validate_query_structure(parsed)
             
